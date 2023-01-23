@@ -12,7 +12,7 @@ typedef struct
 
 FlexCAN CANTransmitter(1000000);
 static CAN_message_t rxmsg;//can受信用buf
-CAN_message_t msg;//can送信用buf
+CAN_message_t msg, m_msg, gm_msg;//can送信用buf
 wheelEscDataSt wEscData[4];//can受信用
 
 Pid pid0;
@@ -58,14 +58,14 @@ void setup(void)
 
 }
 int cnt=0;
-static unsigned long testch[6];
+static unsigned long testch[6];///実際にデータを入れる配列
 void loop(void)
 {
-    static int data[18];                      //入力データが入る？
-  static int dataNumber = 0;                //入力データの数(Serial1.available()の返値)
+  static int data[18];                      //入力の生データ入れる配列
+  static int dataNumber = 0;                //入力データの数(Serial1.available()の返値),受信バッファの数を見る変数
   static unsigned long lastConnectTime = 0; //直前の通信の時間?
-  if (Serial1.available() > 0) {
-    for (int dataNum = Serial1.available(); dataNum > 0; dataNum--) {
+  if (Serial1.available() > 0) {//受信バッファが0以上=何か受信している
+    for (int dataNum = Serial1.available(); dataNum > 0; dataNum--) {//受信したバイト数を見る
       if (dataNumber < 0) {
         Serial1.read();
         dataNumber++;
@@ -76,7 +76,7 @@ void loop(void)
       if (dataNumber > 18) {
         dataNumber = 0;
       }
-      else if (dataNumber == 18) {
+      else if (dataNumber == 18) {//データが揃ったとき
         testch[0] = (((data[1] & 0x07) << 8) | data[0]);          //ch0(364～1024～1684)
         testch[1] = (((data[2] & 0x3F) << 5) | (data[1] >> 3));   //ch1(364～1024～1684)
         testch[2] = (((data[4] & 0x01) << 10) | (data[3] << 2) | (data[2] >> 6)); //ch2(364～1024～1684)
@@ -104,7 +104,7 @@ void loop(void)
     digitalWrite(13, !digitalRead(13)); //プロポ受信したらLEDチカチカ
     flag = 1;
   }
-  else {
+  else {//何も受信していない=通信がロスとしている->非常停止した方が良さそう
     flag = 0;
   }
     
@@ -152,10 +152,6 @@ void loop(void)
   u[2] = pid2.pid_out(u[2]);
   u[3] = pid3.pid_out(u[3]);
   
-  u[0] = (int)(min(max(-16000, -vx - vy + vt), 16000));
-  u[1] = (int)(min(max(-16000, -vx + vy + vt), 16000));
-  u[2] = (int)(min(max(-16000, vx + vy + vt), 16000));
-  u[3] = (int)(min(max(-16000, vx - vy + vt), 16000)); 
    
   Serial.println(u[0]);
   Serial.println(u[1]);
