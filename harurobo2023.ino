@@ -1,8 +1,6 @@
 #include <MsTimer2.h>
 #include <FlexCAN.h>
 #include "PID.h"
-#include <math.h>
-#include <kinetis_flexcan.h>
 
 typedef struct
 {
@@ -12,7 +10,7 @@ typedef struct
 
 FlexCAN CANTransmitter(1000000);
 static CAN_message_t rxmsg;//can受信用buf
-CAN_message_t msg, m_msg, gm_msg;//can送信用buf
+CAN_message_t msg;//can送信用buf
 wheelEscDataSt wEscData[4];//can受信用
 
 Pid pid0;
@@ -20,7 +18,6 @@ Pid pid1;
 Pid pid2;
 Pid pid3;
 
-int flag = 0;
 float vx, vy, vt;
 int u[4] = {};
 int u2[4] = {};
@@ -101,18 +98,16 @@ void loop(void)
         }
       }
     }
-    digitalWrite(13, !digitalRead(13)); //プロポ受信したらLEDチカチカ
-    flag = 1;
   }
-  else {//何も受信していない=通信がロスとしている->非常停止した方が良さそう
-    flag = 0;
+  else {  //何も受信していない=通信がロスとしている->非常停止した方が良さそう
+    digitalWrite(13,LOW);
   }
     
   
 
   if (((data[5] & 0xC0) >> 6) == 1) {
-    m_msg.id = 0x200;
-    m_msg.len = 8;
+    msg.id = 0x200;
+    msg.len = 8;
     for (int i = 0; i < 4; i++) {
       u[i] = 0;
     }
@@ -130,13 +125,15 @@ void loop(void)
   //u[1] = 500;
   //u[2] = 500;
   //u[3] = 500; //ここの数字はrpm指定、-5000~5000くらい
-    
+  
+  #define sinphi 0.707106781   //三角関数の計算は重たいので近似値を置いておくのが良さそう
+  #define cosphi 0.707106781        
   float vx=1.0, vy=0.0, vt=0.0;//ここが目標速度、この場合は前進方向に1m/s
-  float L=825.7;
-  u[0]=mps2rpm(-(1/sqrt(2.0))*vx+(1/sqrt(2.0))*vy+L*vt); //右前
-  u[1]=mps2rpm(-(1/sqrt(2.0))*vx-(1/sqrt(2.0))*vy+L*vt); //右後
-  u[2]=mps2rpm((1/sqrt(2.0))*vx-(1/sqrt(2.0))*vy+L*vt);//左後
-  u[3]=mps2rpm((1/sqrt(2.0))*vx+(1/sqrt(2.0))*vy+L*vt);//左前
+  float L=825.735308;
+  u[0]=mps2rpm(-sinphi*vx+cosphi*vy+L*vt); //右前
+  u[1]=mps2rpm(-sinphi*vx-cosphi*vy+L*vt); //右後
+  u[2]=mps2rpm(sinphi*vx-cosphi*vy+L*vt);//左後
+  u[3]=mps2rpm(sinphi*vx+cosphi*vy+L*vt);//左前
 
   //Serial.print(u[0]);//目標速度
   //Serial.print(",");
@@ -151,7 +148,6 @@ void loop(void)
   u[1] = pid1.pid_out(u[1]);  
   u[2] = pid2.pid_out(u[2]);
   u[3] = pid3.pid_out(u[3]);
-  
    
   Serial.println(u[0]);
   Serial.println(u[1]);
@@ -162,19 +158,7 @@ void loop(void)
     msg.buf[i * 2] = u[i] >> 8;
     msg.buf[i * 2 + 1] = u[i] & 0xFF;    
   }
-  for (int i = 0; i < gm_msg.len; i++) {
-      gm_msg.buf[i * 2] = u[i] >> 8;
-      gm_msg.buf[i * 2 + 1] = u[i] & 0xFF;
-    }
-    analogWrite(23, 0);
-    analogWrite(21, 0);
-  }
-  if(digitalRead(2)==1){
-    analogWrite(23, 0);
-    analogWrite(21, 0);
-  }
-  delay(50);
-
+  
   //Serial.print(pid0.debug());//現在速度
   //Serial.print(",");
   //Serial.print(pid1.debug());
